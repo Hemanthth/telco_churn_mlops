@@ -1,0 +1,9 @@
+{
+    "gender": "Female",
+    "SeniorCitizen": 0,
+    "Partner": "Yes",
+    "tenure": 12,
+    "PhoneService": "Yes",
+    "MonthlyCharges": 65.6,
+    "TotalCharges": 656.0
+}

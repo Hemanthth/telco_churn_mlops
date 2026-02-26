@@ -1,0 +1,99 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  acrName: 'telcochurnmlops'
+  resourceGroup: 'hemanth.peddareddygari'
+  aciName: 'telco-churn-aci'
+  mlflowrackingUri: 'http://localhost:5000'
+
+Stages:
+- stage: CI
+  displayName: 'CI: Data -> Train -> Mlflow -> Registry'
+  jobs:
+  - job: TrainModel
+    steps:
+    - task: UsePythonVersion@0
+      inputs: { versionSpec: '3.11' }
+
+    - script: |
+        pip install mlflow scikit-learn pandas fastapi uvicorn joblib
+        mlflow ui --backend-store-uri ./mlruns --default-artifact-root ./mlruns --host 0.0.0.0 --port 5000 &
+        sleep 10
+        python src/train_model.py
+      displayName: 'Train + Log to Mlflow'
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: 'model'
+        Contents: '**'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/model'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'model-artifacts'
+
+- stage: CD
+  displayName: 'CD: Docker -> ACR -> ACI'
+  dependsOn: CI
+  condition: succeeded()
+  jobs:
+  - deployment: deploy
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: model-artifacts
+
+          - task: AzureCLI@2
+            displayName: 'ACR Login'
+            inputs:
+              azureSubscription: 'acr-connection'
+              scriptType: 'bash'
+              inlineScript: 'az acr login --name $(acrName)'
+
+          - task:  Docker@2
+            displayName: 'Build + Push'
+            inputs:
+              command: 'build'
+              Dockerfile: '**/Dockerfile'
+              repository: 'hem-telco-churn-api'
+              tags: 'latest'
+              arguments: '--build-arg MODEL_VERSION=v$(Build.BuildId)'
+
+          - task: Docker@2
+            displayName: 'Push to ACR'
+            inputs:
+              command: 'push'
+              containerRegistry: 'acr-connection'
+              repository: 'hem-telco-churn-api'
+              tags: 'latest'
+
+          - task: AzureCLI@2
+            displayName: 'Deploy to ACI'
+            inputs:
+              azureSubscription: 'acr-connection'
+              scriptType: 'bash'
+              inlineScript: |
+                az container create \
+                  --resource-group $(resourceGroup) \
+                  --name $(aciName) \
+                  --image $(acrName).azurecr.io/hem-telco-churn-api:latest \
+                  --cpu 1 \
+                  --memory 2 \
+                  --ports 8080 \
+                  --os-type Linux \
+                  --ip-address Public \
+                  --registry-login-server $(acrName).azurecr.io \
+                  --registry-username 372b13ae-e2a9-4cf0-8ef1-0e9f12f84416 \
+                  --registry-password 'NGz8Q~xn_MebBd_Wl4INoJGy5qa.e5gWfgRWUb1e' \
+                  --overwrite
+
+                IP=$(az container show --resource-group $(resourceGroup) --name $(aciName) --query ipAddress.ip -o tsv)
+                echo " ACI LIVE at: http://$IP:8080/health"
