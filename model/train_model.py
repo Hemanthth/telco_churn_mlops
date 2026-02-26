@@ -31,7 +31,7 @@ def preprocess(df):
 
 with mlflow.start_run():
     #Load
-    df = pd.read_csv('C:\\Users\\hemanth.peddareddyga\\Documents\\Telco-Customer-Churn.csv')
+    df = pd.read_csv('data/raw/Telco-Customer-Churn.csv')
     df, scaler = preprocess(df)
 
     X = df.drop(['Churn', 'customerID'], axis=1)
