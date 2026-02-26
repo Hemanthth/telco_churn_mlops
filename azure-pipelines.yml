@@ -92,7 +92,7 @@ Stages:
                   --ip-address Public \
                   --registry-login-server $(acrName).azurecr.io \
                   --registry-username 372b13ae-e2a9-4cf0-8ef1-0e9f12f84416 \
-                  --registry-password $(azSecret) \
+                  --registry-password 'NGz8Q~xn_MebBd_Wl4INoJGy5qa.e5gWfgRWUb1e' \
                   --overwrite
 
                 IP=$(az container show --resource-group $(resourceGroup) --name $(aciName) --query ipAddress.ip -o tsv)
